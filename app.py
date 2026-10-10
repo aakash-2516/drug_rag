@@ -49,11 +49,33 @@ def load_resources(chroma_path: str, collection_name: str):
     embedding_function = SentenceTransformerEmbeddingFunction(
         model_name="all-MiniLM-L6-v2"
     )
+
     db_client = chromadb.PersistentClient(path=chroma_path)
-    db_collection = db_client.get_collection(
+
+    db_collection = db_client.get_or_create_collection(
         name=collection_name,
         embedding_function=embedding_function,
+        metadata={"hnsw:space": "cosine"},
     )
+
+    # Populate the collection if it is empty.
+    if db_collection.count() == 0:
+        import json
+
+        data_path = Path(__file__).parent / "metformin_chunks.json"
+
+        with open(data_path, "r", encoding="utf-8") as file:
+            chunks = json.load(file)
+
+        db_collection.upsert(
+            ids=[chunk["chunk_id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {"drug": chunk["drug"], "section": chunk["section"]}
+                for chunk in chunks
+            ],
+        )
+
     return db_client, db_collection
 
 try:
